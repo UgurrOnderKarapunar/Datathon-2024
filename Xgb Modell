@@ -1,0 +1,239 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.impute import KNNImputer, SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.metrics import accuracy_score
+from sklearn.impute import SimpleImputer
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import LabelEncoder
+import seaborn as sns
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from tensorflow.keras.optimizers import Adam
+import matplotlib.pyplot as plt
+import scipy.stats as stats
+from xgboost import XGBRegressor
+from tensorflow.keras.models import Sequential
+from keras.layers import Dense, Input
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_seq_item', None) #
+pd.set_option('display.float_format', '{:.2f}'.format)
+test= pd.read_csv("/content/test_x.csv")
+train=pd.read_csv("/content/train.csv")
+sub=pd.read_csv("/content/sample_submission.csv")
+def con_cat(train, test):
+    df1, df2 = train.copy(), test.copy()
+    df1["group"] = "train"
+    df2["group"] = "test"
+
+    return pd.concat([df1, df2], axis=0, ignore_index=True)
+
+df = con_cat(train, test)
+
+def fixed_all_error(dataframe):
+    # Drop columns
+    dataframe.drop(columns=["Dogum Yeri", "Ikametgah Sehri", "Universite Adi", "Lise Adi", "Lise Adi Diger",
+                            "Lise Sehir", "Lise Bolumu", "Lise Bolum Diger", "Burs Aldigi Baska Kurum",
+                            "Baska Kurumdan Aldigi Burs Miktari", "Uye Oldugunuz Kulubun Ismi",
+                            "Hangi STK'nin Uyesisiniz?", "Girisimcilikle Ilgili Deneyiminizi Aciklayabilir misiniz?",
+                            "Daha Önceden Mezun Olunduysa, Mezun Olunan Üniversite"], axis=1, inplace=True)
+
+    # Doğum tarihi
+    dataframe["Dogum Tarihi"] = pd.to_datetime(dataframe["Dogum Tarihi"], errors='coerce')
+    dataframe["Dogum Yili"] = dataframe["Dogum Tarihi"].dt.year
+
+    # Replace işlemleri
+    dataframe["Universite Turu"] = dataframe["Universite Turu"].replace({"ÖZEL": "Özel", "DEVLET": "Devlet"})
+    dataframe["Burs Aliyor mu?"] = dataframe["Burs Aliyor mu?"].replace({"evet": "Evet", "hayır": "Hayır"})
+    dataframe["Universite Kacinci Sinif"] = dataframe["Universite Kacinci Sinif"].replace(
+        {"0 ": "Hazırlık", "hazırlık": "Hazırlık"})
+    dataframe["Lise Turu"] = dataframe["Lise Turu"].replace(
+        {"özel lisesi  ": "Özel", "meslek": "Meslek Lisesi", "devlet": "Düz"})
+
+    dataframe["Anne Egitim Durumu"] = dataframe["Anne Egitim Durumu"].replace(
+        {"Üniversite Mezunu": "Üniversite", "ÜNİVERSİTE": "Üniversite", "EĞİTİM YOK": "Eğitim Yok",
+         "ORTAOKUL MEZUNU": "Ortaokul Mezunu", "İlkokul Mezunu": "İlkokul", "Ortaokul Mezunu": "Ortaokul",
+         "YÜKSEK LİSANS": "Yüksek Lisans", "DOKTORA": "Doktora", "İLKOKUL MEZUNU": "İlkokul",
+         "LİSE": "Lise", "Lise Mezunu": "Lise", "Yüksek Lisans / Doktara": "Yüksek Lisans / Doktora"})
+
+    dataframe["Anne Sektor"] = dataframe["Anne Sektor"].replace({"0": np.nan, "-": np.nan})
+    dataframe["Anne Sektor"] = dataframe["Anne Sektor"].replace({"KAMU": "Kamu", "ÖZEL SEKTÖR": "Özel Sektör", "DİĞER": "Diğer"})
+    dataframe['Lise Mezuniyet Notu'] = dataframe['Lise Mezuniyet Notu'].str.split('-').str[-1].str.strip()
+    dataframe['Lise Mezuniyet Notu'] = dataframe['Lise Mezuniyet Notu'].replace("Not ortalaması yok", np.nan)
+    dataframe['Lise Mezuniyet Notu'] = dataframe['Lise Mezuniyet Notu'].replace("2.50 ve altı", "2.50")
+    dataframe['Lise Mezuniyet Notu'] = dataframe['Lise Mezuniyet Notu'].replace("nan", np.nan)
+
+
+    dataframe["Baba Egitim Durumu"] = dataframe["Baba Egitim Durumu"].replace(
+        {"Üniversite Mezunu": "Üniversite", "ÜNİVERSİTE": "Üniversite", "EĞİTİM YOK": "Eğitim Yok",
+         "ORTAOKUL MEZUNU": "Ortaokul Mezunu", "İlkokul Mezunu": "İlkokul", "Ortaokul Mezunu": "Ortaokul",
+         "YÜKSEK LİSANS": "Yüksek Lisans", "DOKTORA": "Doktora", "İLKOKUL MEZUNU": "İlkokul",
+         "LİSE": "Lise", "Lise Mezunu": "Lise", "Yüksek Lisans / Doktara": "Yüksek Lisans / Doktora",
+         "Eğitimi Yok": "Eğitim Yok"})
+
+    dataframe["Baba Sektor"] = dataframe["Baba Sektor"].replace({"0": np.nan, "-": np.nan})
+    dataframe["Baba Sektor"] = dataframe["Baba Sektor"].replace({"KAMU": "Kamu", "ÖZEL SEKTÖR": "Özel Sektör", "DİĞER": "Diğer"})
+
+    dataframe["Kardes Sayisi"] = dataframe["Kardes Sayisi"].replace({"Kardeş Sayısı 1 Ek Bilgi Aile Hk. Anne Vefat": np.nan})
+    dataframe["Kardes Sayisi"] = dataframe["Kardes Sayisi"].replace({"nan": np.nan})
+
+    dataframe["Spor Dalindaki Rolunuz Nedir?"] = dataframe["Spor Dalindaki Rolunuz Nedir?"].replace(
+        {"KAPTAN / LİDER": "Kaptan", "DİĞER": "Diğer", "Lider/Kaptan": "Kaptan"})
+    dataframe["Spor Dalindaki Rolunuz Nedir?"] = dataframe["Spor Dalindaki Rolunuz Nedir?"].replace({"-": np.nan})
+
+    dataframe["Ingilizce Seviyeniz?"] = dataframe["Ingilizce Seviyeniz?"].replace("0 ", "Başlangıç")
+
+    # Universite Not Ortalamasi düzeltilmesi
+    dataframe["Universite Not Ortalamasi"] = dataframe["Universite Not Ortalamasi"].str.split('-').str[1]
+    dataframe["Universite Not Ortalamasi"] = dataframe["Universite Not Ortalamasi"].replace(
+        ["Ortalama bulunmuyor", "Not ortalaması yok"], np.nan)
+    return dataframe
+df = fixed_all_error(df)
+import joblib
+
+def fillna(dataframe):
+    # Separate categorical and numerical columns
+    cat = dataframe.select_dtypes(include="object").columns
+    num = dataframe.select_dtypes(include=["float", "int"]).columns
+
+    # Fill missing values for categorical columns with mode (most frequent value)
+    for col in cat:
+        dataframe[col].fillna(dataframe[col].mode()[0], inplace=True)
+
+    # Fill missing values for numerical columns with median
+    for col in num:
+        dataframe[col].fillna(dataframe[col].median(), inplace=True)
+
+    # Convert Dogum Tarihi to datetime for interpolation
+    dataframe["Dogum Tarihi"] = pd.to_datetime(dataframe["Dogum Tarihi"], errors='coerce')
+
+
+
+
+    dataframe["Kardes Sayisi"]=dataframe["Kardes Sayisi"].astype(int)
+    dataframe["Lise Mezuniyet Notu"]=dataframe["Lise Mezuniyet Notu"].astype(float)
+    dataframe["Dogum Yili"]=dataframe["Dogum Yili"].astype(int)
+
+    return dataframe
+
+# Apply fillna to the DataFrame
+df = fillna(df)
+
+# Save the DataFrame using joblib
+joblib_file = "filled_dataframe.pkl"  # You can change the filename
+joblib.dump(df, joblib_file)
+
+print(f"DataFrame saved as {joblib_file}")
+import pandas as pd
+import numpy as np
+import joblib
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
+from sklearn.metrics import mean_squared_error
+from sklearn.impute import KNNImputer
+from xgboost import XGBRegressor
+
+# Load your DataFrame (make sure to load your data correctly)
+# df = pd.read_csv('/path/to/your/data.csv')  # Ensure df is loaded
+df.drop("Dogum Tarihi", axis=1, inplace=True)
+
+def preprocess_and_train_rf(dataframe, target):
+    # Split into train and test sets based on the 'group' column
+    train = dataframe[dataframe["group"] == "train"].drop("group", axis=1)
+    test = dataframe[dataframe["group"] == "test"].drop("group", axis=1)
+
+    # Split X and y
+    X_train = train.drop(target, axis=1)
+    y_train = train[target]
+
+    # Prepare the test DataFrame for predictions
+    y_test = test[target] if target in test.columns else None
+    X_test = test.drop(target, axis=1) if y_test is not None else test
+
+    # Identify categorical and numerical columns
+    cat = X_train.select_dtypes(include="object").columns
+    num = X_train.select_dtypes(include=["float", "int"]).columns
+    print(f"Categorical Cols: {cat}")
+    print(f"Numerical Cols: {num}")
+
+    # Drop dominant categories (columns where a category covers more than 80%)
+    doms_list = []
+    for col in cat:
+        doms = dataframe[col].value_counts(normalize=True)
+        if doms.max() > 0.80:
+            doms_list.append(col)
+
+    if doms_list:
+        X_train.drop(doms_list, axis=1, inplace=True)
+        X_test.drop(doms_list, axis=1, inplace=True)
+        cat = X_train.select_dtypes(include="object").columns
+
+    # Define preprocessing pipelines
+    numerical_transformer = Pipeline(steps=[
+        ('imputer', KNNImputer()),
+        ('scaler', RobustScaler())])
+
+    categorical_transformer = Pipeline(steps=[
+        ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))])
+
+    # Combine transformers into a preprocessor
+    preprocessor = ColumnTransformer(transformers=[
+        ('num', numerical_transformer, num),
+        ('cat', categorical_transformer, cat)])
+
+    # Define the XGBoost model
+    model = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('regressor', XGBRegressor())
+    ])
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Make predictions on the test data
+    y_pred = model.predict(X_test)
+
+    # Save the trained model using joblib
+    model_filename = 'xgboost_model.pkl'
+    joblib.dump(model, model_filename)
+    print(f"Model saved as {model_filename}")
+
+    # Calculate RMSE if y_test is available
+    if y_test is not None:
+        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+        print(f"RMSE: {rmse}")
+    else:
+        print("Warning: True values for RMSE calculation are missing.")
+
+    # Check the number of predictions and rows in the test DataFrame
+    print(f"Number of predictions: {len(y_pred)}")
+    print(f"Number of test rows: {X_test.shape[0]}")
+
+    # Return the trained model and predictions for the test data
+    return model, y_pred
+
+# Run the function to train the model and get predictions
+model, test_predictions = preprocess_and_train_rf(df, "Degerlendirme Puani")
+
+# Prepare submission
+test_df = pd.read_csv('/content/test_x.csv')  # Adjust path as needed
+df_sub = pd.DataFrame({
+    'id': test_df['id'],
+    'Degerlendirme Puani': test_predictions
+})
+
+# Check length of submission DataFrame
+print(f"Submission DataFrame shape: {df_sub.shape}")
+
+# Ensure that test_predictions matches the submission index
+if len(test_predictions) == df_sub.shape[0]:
+    df_sub.to_csv('submission1.csv', index=False)
+    print(f"Submission file saved as submission.csv")
+else:
+    print("Error: Length of predictions does not match submission DataFrame.")
