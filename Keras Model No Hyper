@@ -182,21 +182,21 @@ def modelling_dl(dataframe, target):
 
     model = Sequential([
         Input(shape=(X_train_processed.shape[1],)),
+        Dense(128, activation='relu'),
         Dense(64, activation='relu'),
         Dense(32, activation='relu'),
-        Dense(16, activation='relu'),
         Dense(1, activation="linear")
     ])
 
-    model.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
+    model.compile(optimizer=Adam(learning_rate=0.01), loss='mean_squared_error')
 
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=20, restore_best_weights=True)
     checkpoint = ModelCheckpoint("best_model.h5.keras", monitor='val_loss', save_best_only=True, verbose=1)
 
     history = model.fit(
         train_dataset,
         validation_data=test_dataset,
-        epochs=100,
+        epochs=200,
         callbacks=[early_stopping, checkpoint],
         verbose=1
     )
@@ -208,22 +208,16 @@ def modelling_dl(dataframe, target):
 
     mse = mean_squared_error(y_test, y_pred)
     rmse = np.sqrt(mse)
-    accuracy = accuracy_score(y_test, (y_pred > 0.5).astype(int))
-    f1 = f1_score(y_test, (y_pred > 0.5).astype(int))
-    recall = recall_score(y_test, (y_pred > 0.5).astype(int))
-    precision = precision_score(y_test, (y_pred > 0.5).astype(int))
-    roc_auc = roc_auc_score(y_test, y_pred)
+    mae = np.mean(np.abs(y_test - y_pred))
 
+    print(f"Mean Squared Error: {mse:.2f}")
     print(f"Root Mean Squared Error: {rmse:.2f}")
-    print(f"Accuracy: {accuracy:.2f}")
-    print(f"F1 Score: {f1:.2f}")
-    print(f"Recall: {recall:.2f}")
-    print(f"Precision: {precision:.2f}")
-    print(f"ROC AUC Score: {roc_auc:.2f}")
+    print(f"Mean Absolute Error: {mae:.2f}")
 
     def plot_history(history):
         plt.plot(history.history['loss'], label='Training Loss')
         plt.plot(history.history['val_loss'], label='Validation Loss')
+        plt.title('Model Loss Over Epochs')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
         plt.legend()
@@ -238,11 +232,11 @@ def modelling_dl(dataframe, target):
         "Degerlendirme Puani": y_pred  
     })
 
-    submission_file_path = "submissiondatas.csv"
+    submission_file_path = "submissiondatas2.csv"
     submission.to_csv(submission_file_path, index=False)
 
     print(f"Submission file saved as {submission_file_path}.")
-    return X_train, y_train, categorical_c, numerical_c, y_test, y_pred
+    return X_train, y_train, categorical_c, numerical_c, y_test, y_pred,model, history
 
 
-X_train, y_train, categorical_c, numerical_c, y_test, y_pred = modelling_dl(df, "Degerlendirme Puani")
+X_train, y_train, categorical_c, numerical_c, y_test, y_pred,model, history = modelling_dl(df, "Degerlendirme Puani")
